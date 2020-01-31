@@ -28,6 +28,7 @@
   "corsOrigin": {
     "whitelist": [
       "https://challenge-wexxs2.herokuapp.com",
+      "http://portchain-frontend-app.herokuapp.com",
       "http://localhost:3000",
       "http://localhost:4000",
       "http://example2.com",
