@@ -157,7 +157,7 @@ export class PortResolver {
         return PortCall.findAll({
             where: {
                 fkVesselId:vessel,
-                lastStatus: { [Sequelize.Op.in]:[PORT_CALL_STATUS.PROCESSED,PORT_CALL_STATUS.VALID,PORT_CALL_STATUS.DELETED]}
+                lastStatus: { [Sequelize.Op.in]:[PORT_CALL_STATUS.PROCESSED,PORT_CALL_STATUS.VALID]}
             },
             order: [['arrivalDate', 'ASC']]
         })

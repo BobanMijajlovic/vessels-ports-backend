@@ -31,15 +31,17 @@ interface INodeStatusResult {
 
 class PortCall {
     status: number
+    source: 'N'| 'O'   /** new or old*/
     portCallModel: any
 
-    constructor (portCallModel: object , status?: number) {
+    constructor (portCallModel: object, source: 'N' | 'O',  status?: number, ) {
         this.status = status ? status : PORT_CALL_STATUS.NOT_DEFINED
+        this.source = source
         this.portCallModel = portCallModel
     }
 
     get newInstance () {
-        const instance = new PortCall(this.portCallModel,this.status)
+        const instance = new PortCall(this.portCallModel,this.source,this.status)
         return instance
     }
 
@@ -73,16 +75,16 @@ export interface  IComparePortsResult {
 
 export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): IComparePortsResult => {
 
-    const previousArray = realArrayPrev.map((x,index) => new PortCall(x))
-    const currentArray = realArrayNew.map((x,index) => new PortCall(x))
+    const previousArray = realArrayPrev.map((x, index) => new PortCall(x, 'O'))
+    const currentArray = realArrayNew.map((x, index) => new PortCall(x, 'N'))
 
     /** pick up all in previous that we are sure are removed */
-    const removedPorts =  previousArray.filter( pp => !(currentArray.find(x => x.portId === pp.portId))).map(y => y.portId)
+    const removedPorts = previousArray.filter(pp => !(currentArray.find(x => x.portId === pp.portId))).map(y => y.portId)
 
     /** pick up all that are new for sure */
     const addedPorts = currentArray.filter(np => !(previousArray.find(x => x.portId === np.portId))).map(y => y.portId)
 
-    const isRemovedPort  = (portId) => {
+    const isRemovedPort = (portId) => {
         return !!removedPorts.find(x => x === portId)
     }
 
@@ -101,13 +103,66 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
         result: result
     })
 
+    const  findResults = (index) => {
+        if (realArrayNew.length === 0) {
+            return
+        }
+        let previousArray = realArrayPrev.map((x, index) => new PortCall(x, 'O'))
+        const currentArray = realArrayNew.map((x, index) => new PortCall(x, 'N'))
+        const p = currentArray[0]
+        const i = previousArray.findIndex((x,ind) => {
+            if (ind <= index ) {
+                return false
+            }
+            return x.portId === p.portId
+        })
+        if (i === -1) {
+            return
+        }
+        const arr = []
+        previousArray.every((x,indx) => {
+            if (indx === i) {
+                return false
+            }
+            x.status = PORT_CALL_STATUS.PROCESSED
+            arr.push(x)
+            return true
+        })
+
+        previousArray = [...arr, ...previousArray]
+        const _result: INodeStatusResult[] = []
+        PortCallsCompareNode.compareSchedule({
+            isRemovedPort: isRemovedPort,
+            isAddedPort: isAddedPort,
+            arrayNew: currentArray.map(x => x.newInstance),
+            arrayOld: previousArray.map(x => x.newInstance),
+            indexNew: 0,
+            indexOld: 0,
+            result: _result
+        })
+        result.push(..._result)
+        findResults(i)
+    }
+
+    findResults(0)
+
     if (result.length === 0) {
         return void(0)
     }
 
-    result.sort((a,b) => {
-        return Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif)
-    })
+    const x = result[result.length - 1]
+    result = result.filter(x => PortCallsCompareNode.isAcceptable(x))
+    PortCallsCompareNode.isAcceptable(x)
+
+    if (result.length > 1) {
+        result.sort((a,b) => {
+            return Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif)
+        })
+    }
+
+    if (result.length === 0) {
+        return void(0)
+    }
 
     let res = result[0]
     /** just take with minumum time difference */
@@ -135,6 +190,13 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
 
 const MAX_DEEP = 500
 
+export interface INodeResult {
+    array:  PortCall[],
+    arrayOld:  PortCall[]
+    changes: number,
+    arrivalDif: number
+}
+
 class PortCallsCompareNode {
     private data: INodeStatus
     constructor ( data: INodeStatus) {
@@ -159,6 +221,72 @@ class PortCallsCompareNode {
             return pp
         }
         return void(0)
+    }
+
+    static isAcceptable (result: INodeResult) {
+        if (result.array.length === 0) {
+            return true
+        }
+        const p = result.array[0]
+        if (p.status !== PORT_CALL_STATUS.PROCESSED  &&  p.status !== PORT_CALL_STATUS.VALID ) {
+            return false
+        }
+
+        let startRoute = result.arrayOld.filter(p =>  p.source === 'O')
+        let endRoute = result.array.filter(p => p.source === 'N')
+        if (startRoute.length === 0 || endRoute.length === 0) {
+            return
+        }
+        const isErrorInSystem = startRoute.find(x => {
+            return (x.status === PORT_CALL_STATUS.INSERTED ||  x.status === PORT_CALL_STATUS.NEW || x.status === PORT_CALL_STATUS.ADDED)
+        })
+        const isErrorInSystem2 = endRoute.find((x => {
+            return (x.status === PORT_CALL_STATUS.DELETED  || x.status === PORT_CALL_STATUS.PROCESSED ||  x.status === PORT_CALL_STATUS.REMOVED)
+        }))
+
+        if (isErrorInSystem || isErrorInSystem2) {
+            return false /** this has to be additionally processed */
+        }
+
+        /** all start route processed removed from start */
+        let index = startRoute.findIndex(x => x.status !== PORT_CALL_STATUS.PROCESSED)
+        if (index > 0) {
+            startRoute = startRoute.slice(index)
+        }
+
+        endRoute = endRoute.reverse()
+        index = endRoute.findIndex(x => x.status !== PORT_CALL_STATUS.ADDED)
+        if (index > 0) {
+            endRoute = endRoute.slice(index)
+        }
+        endRoute = endRoute.reverse()
+
+        while (endRoute.length > 0 && startRoute.length > 0) {
+            const o = endRoute.pop()
+            const n = startRoute.pop()
+
+            if (!o) {
+                if (n.status === PORT_CALL_STATUS.ADDED) {
+                    continue
+                } else {
+                    return false
+                }
+            }
+            if (!n) {
+                if (o.status === PORT_CALL_STATUS.REMOVED) {
+                    continue
+                } else {
+                    return false
+                }
+            }
+
+            if (n.portId === o.portId) {
+                if (n.status !== o.status) {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     checkChanges (result: INodeStatusResult) {
@@ -318,13 +446,13 @@ class PortCallsCompareNode {
         /** we must start new search in two direction */
         /** give priority to some search*/
 
-        if (this.data.indexNew === 0  || (this.data.arrayNew[this.data.indexNew - 1].status === PORT_CALL_STATUS.NEW) ) {
+        if (this.data.indexNew === 0  || (this.data.arrayNew[this.data.indexNew - 1].status === PORT_CALL_STATUS.REMOVED) ) {
             /** if first then probably is done  - processed */
             this.fixNodePoint(true)
             return
         }
 
-        if (this.data.arrayNew[this.data.indexNew - 1].status === PORT_CALL_STATUS.REMOVED) {
+        if (this.data.arrayNew[this.data.indexNew - 1].status === PORT_CALL_STATUS.ADDED) {
             this.fixNodePoint(false)
             return
         }

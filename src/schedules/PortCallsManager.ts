@@ -191,7 +191,7 @@ class PortCallsManager {
 
     constructor () {
         this.currentDate = new Date(2019, 0, 1, 12, 12)
-        this.lastDate = new Date(2019,5,1, 12,12)
+        this.lastDate = new Date(2019,1,6, 12,12)
     }
 
     async setVessels () {
@@ -216,7 +216,8 @@ class PortCallsManager {
     }
 
     async run () {
-        const vesselsProcess = (await Vessel.findAll()).slice(0, 100).map((x: any) => {
+        const vessels = (await Vessel.findAll())  //.filter( x => x.id === 9485007)
+        const vesselsProcess = vessels.map((x: any) => {
             const vp = new VesselPortCall(x.id)
             return vp.process(this.currentDate)
         })
@@ -230,4 +231,4 @@ class PortCallsManager {
 }
 
 export const instance = new PortCallsManager()
- export default instance
+export default instance
