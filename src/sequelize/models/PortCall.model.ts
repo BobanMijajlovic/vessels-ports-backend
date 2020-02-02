@@ -6,7 +6,8 @@ import {
     Int,
     ObjectType,
     Query,
-    Resolver
+    Resolver,
+    Subscription
 } from 'type-graphql'
 import {
     AutoIncrement,
@@ -68,7 +69,7 @@ export default class PortCall extends Model<PortCall> {
     })
     departureDate: Date
 
-    @Field()
+    @Field( type => Int)
     @Column({
         comment: ' 0 - added regularly like new port , 1- inserted, 2 - changed ( new record that has same port but different arrival or departure time)',
         allowNull: false,
@@ -78,7 +79,7 @@ export default class PortCall extends Model<PortCall> {
     })
     initStatus: number
 
-    @Field()
+    @Field( type => Int)
     @Column({
         allowNull: true,
         type: DataType.INTEGER,
@@ -86,7 +87,7 @@ export default class PortCall extends Model<PortCall> {
     })
     lastStatus: number
 
-    @Field()
+    @Field(type => Int)
     @Column({
         allowNull: false,
         type: DataType.INTEGER,
@@ -94,7 +95,7 @@ export default class PortCall extends Model<PortCall> {
     })
     validSequence: number
 
-    @Field(type => Int)
+    @Field(type => Int,{nullable: true})
     @ForeignKey(() => PortCall)
     @Column({
         comment: 'pointer to last port call that consist data of changed arrival or departure time',

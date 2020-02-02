@@ -118,6 +118,8 @@ export class VesselPortCall {
         })
 
         const compareResult = compareSchedulePortCalls(portCalls, previousValidPorts)
+        compareResult.printPorts()
+
         /** Result have to bi fixed */
         const transaction = await sequelize.transaction()
         const properties = {transaction: transaction}
@@ -190,8 +192,8 @@ class PortCallsManager {
     private lastDate: Date
 
     constructor () {
-        this.currentDate = new Date(2019, 0, 1, 12, 12)
-        this.lastDate = new Date(2019,1,6, 12,12)
+        this.currentDate = new Date(2019, 0, 20, 12, 12)
+        this.lastDate = new Date(2019,1,1, 12,12)
     }
 
     async setVessels () {
@@ -216,13 +218,14 @@ class PortCallsManager {
     }
 
     async run () {
-        const vessels = (await Vessel.findAll())  //.filter( x => x.id === 9485007)
+        const vessels = (await Vessel.findAll()).filter( x => x.id === 9461867)
         const vesselsProcess = vessels.map((x: any) => {
             const vp = new VesselPortCall(x.id)
             return vp.process(this.currentDate)
         })
         await Promise.all(vesselsProcess)
         this.currentDate.setDate(this.currentDate.getDate() + 1)
+        console.log(this.currentDate)
         if (this.lastDate < this.currentDate) {
             return
         }

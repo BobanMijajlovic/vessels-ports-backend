@@ -71,12 +71,55 @@ class PortCall {
 export interface  IComparePortsResult {
     resultArrStr: string[]
     resultCompare: INodeStatusResult
+    printPorts: ()=> void
+}
+
+const __result = (prevArr, newArr, totalChange, arrivalDif) => {
+    const res = {
+        array: newArr,
+        arrayOld: prevArr,
+        changes: totalChange,
+        arrivalDif: arrivalDif
+    }
+
+    const portCallStatusStr = Object.keys(PORT_CALL_STATUS_STR)
+    const resultArrStr =  res.array.map(x => portCallStatusStr[x.status])
+    return {
+        resultCompare: res,
+        resultArrStr: resultArrStr,
+        printPorts: () => {
+            console.log()
+            let arr =  prevArr.filter(x => x.source === 'O').map(x => x.portId)
+            console.log(arr.join(','))
+            arr =  newArr.filter(x => x.source === 'N').map(x => x.portId)
+            console.log(arr.join(','))
+            console.log(resultArrStr.join(','))
+            console.log()
+        }
+    }
 }
 
 export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): IComparePortsResult => {
 
-    const previousArray = realArrayPrev.map((x, index) => new PortCall(x, 'O'))
-    const currentArray = realArrayNew.map((x, index) => new PortCall(x, 'N'))
+    const previousArray = realArrayPrev.map((x) => new PortCall(x, 'O'))
+    const currentArray = realArrayNew.map((x) => new PortCall(x, 'N'))
+    /** new new ports from service , mark all previous processed */
+    if (currentArray.length === 0) {
+        previousArray.forEach(x => {
+            x.status = PORT_CALL_STATUS.PROCESSED
+            currentArray.push(x)
+        })
+        return __result(previousArray,currentArray,0,0)
+
+    }
+
+    if (previousArray.length === 0)  {
+        currentArray.forEach(x => {
+            x.status = PORT_CALL_STATUS.ADDED
+            previousArray.push(x)
+        })
+        return __result(previousArray,currentArray,0,0)
+    }
 
     /** pick up all in previous that we are sure are removed */
     const removedPorts = previousArray.filter(pp => !(currentArray.find(x => x.portId === pp.portId))).map(y => y.portId)
@@ -88,9 +131,7 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
         return !!removedPorts.find(x => x === portId)
     }
 
-    const isAddedPort = (portId) => {
-        return !!addedPorts.find(x => x === portId)
-    }
+    const isAddedPort = (portId) =>  !!addedPorts.find(x => x === portId)
     let result: INodeStatusResult[] = []
 
     PortCallsCompareNode.compareSchedule({
@@ -107,14 +148,11 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
         if (realArrayNew.length === 0) {
             return
         }
-        let previousArray = realArrayPrev.map((x, index) => new PortCall(x, 'O'))
-        const currentArray = realArrayNew.map((x, index) => new PortCall(x, 'N'))
+        const previousArray = realArrayPrev.map((x) => new PortCall(x, 'O'))
+        let currentArray = realArrayNew.map((x) => new PortCall(x, 'N'))
         const p = currentArray[0]
         const i = previousArray.findIndex((x,ind) => {
-            if (ind <= index ) {
-                return false
-            }
-            return x.portId === p.portId
+            return ind <= index  ?  false :  x.portId === p.portId
         })
         if (i === -1) {
             return
@@ -129,7 +167,7 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
             return true
         })
 
-        previousArray = [...arr, ...previousArray]
+        currentArray = [...arr, ...currentArray]
         const _result: INodeStatusResult[] = []
         PortCallsCompareNode.compareSchedule({
             isRemovedPort: isRemovedPort,
@@ -150,42 +188,25 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
         return void(0)
     }
 
-    const x = result[result.length - 1]
     result = result.filter(x => PortCallsCompareNode.isAcceptable(x))
-    PortCallsCompareNode.isAcceptable(x)
 
-    if (result.length > 1) {
-        result.sort((a,b) => {
-            return Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif)
-        })
-    }
+    result.sort((a,b) =>  a.changes - b.changes)
 
     if (result.length === 0) {
         return void(0)
     }
 
     let res = result[0]
-    /** just take with minumum time difference */
-    result = result.filter(x => {
-        return Math.abs(x.arrivalDif) === Math.abs(res.arrivalDif)
-    })
+    /** just take with minimum time difference */
+    result = result.filter(x =>  x.changes === res.changes)
 
     if ( result.length > 0) {
-        /** if more then one result take one with minimum changes */
-        result.sort((a,b) => {
-            return a.changes - b.changes
-        })
+        result.sort((a,b) =>  Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif))
         res = result[0]
     }
 
-    const portCallStatusStr = Object.keys(PORT_CALL_STATUS_STR)
+    return __result(res.arrayOld,res.array,res.changes,res.arrivalDif)
 
-    return {
-        resultCompare: res,
-        resultArrStr: res.array.map(x => {
-            return portCallStatusStr[x.status]
-        })
-    }
 }
 
 const MAX_DEEP = 500
@@ -228,7 +249,7 @@ class PortCallsCompareNode {
             return true
         }
         const p = result.array[0]
-        if (p.status !== PORT_CALL_STATUS.PROCESSED  &&  p.status !== PORT_CALL_STATUS.VALID ) {
+        if (p.status !== PORT_CALL_STATUS.PROCESSED  &&  p.status !== PORT_CALL_STATUS.VALID  &&  p.status !== PORT_CALL_STATUS.ADDED ) {
             return false
         }
 
@@ -291,7 +312,7 @@ class PortCallsCompareNode {
 
     checkChanges (result: INodeStatusResult) {
         /** first mark all at start that have removed that are processed */
-
+        result.changes = 0
         result.array.every( x => {
             if (x.status !== PORT_CALL_STATUS.REMOVED) {
                 return false
@@ -316,22 +337,20 @@ class PortCallsCompareNode {
             if (c.status !== PORT_CALL_STATUS.PROCESSED) {
                 break
             }
-            result.changes = 1
+            result.changes++
             index++
         }
 
         /** all at end marked as ADDED  count as one change */
         let lenEnd = result.array.length
-        let _added = 0
         while (lenEnd > index) {
             const c = result.array[lenEnd - 1]
             if ( c.status !== PORT_CALL_STATUS.ADDED ) {
                 break
             }
-            _added = 1
+            result.changes++
             lenEnd--
         }
-        result.changes += _added
 
         while ( index < lenEnd ) {
             const c = result.array[index++]
