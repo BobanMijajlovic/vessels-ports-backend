@@ -148,6 +148,31 @@ export default class PortCall extends Model<PortCall> {
     @Field(type => PortCall)
     @BelongsTo(() => PortCall)
     portCall: PortCall
+
+}
+
+@ObjectType('portCallHistory')
+class PortCallHistory {
+    @Field(type => Int)
+    id: number
+
+    @Field()
+    createdAt: Date
+
+    @Field()
+    updatedAt: Date
+
+    @Field(type => Int)
+    initStatus: number
+
+    @Field(type => Int)
+    lastStatus: number
+
+    @Field()
+    arrivalDate: Date
+
+    @Field()
+    departureDate: Date
 }
 
 @Resolver()
@@ -155,35 +180,106 @@ export class PortResolver {
 
     @Query(returns => [PortCall], {name: 'validSchedule'})
     async validSchedule (@Arg('vessel', type => Int) vessel: number) {
-        return PortCall.findAll({
+        const arrayPortCalls = (await PortCall.findAll({
             where: {
                 fkVesselId:vessel,
-                lastStatus: { [Sequelize.Op.in]:[PORT_CALL_STATUS.PROCESSED,PORT_CALL_STATUS.VALID]}
+                lastStatus: { [Sequelize.Op.in]:[PORT_CALL_STATUS.PROCESSED,PORT_CALL_STATUS.VALID,PORT_CALL_STATUS.DELETED]}
             },
             order: [['arrivalDate', 'ASC']]
-        })
+        })).map(x => x.toJSON() as PortCall)
+
+        for (let i = 0;i < arrayPortCalls.length;i++) {
+            const pCall: PortCall  = arrayPortCalls[i]
+            let port = pCall
+            while (port.fkPortCallId) {
+                port = await PortCall.findByPk(port.fkPortCallId)
+                if (!port) {
+                    break
+                }
+                pCall.createdAt = port.createdAt
+                pCall.initStatus = port.initStatus
+            }
+        }
+
+        /** group same subsequent ports */
+        const finalArray = []
+        while (arrayPortCalls.length !== 0 ) {
+            const arr = []
+            const pc = arrayPortCalls.shift()
+            arr.push(pc)
+            while (arrayPortCalls.length !== 0 ) {
+                if (pc.fkPortId !== arrayPortCalls[0].fkPortId) {
+                    break
+                }
+                arr.push(arrayPortCalls.shift())
+            }
+            arr.sort((x,y) => x.createdAt.getTime() - y.createdAt.getTime())
+            pc.lastStatus = arr[arr.length - 1].lastStatus
+            pc.updatedAt = arr[arr.length - 1].updatedAt
+            finalArray.push(pc)
+        }
+        return finalArray
     }
 
-    @Query(returns => [PortCall], {name: 'portHistory'})
+    @Query(returns => [PortCallHistory], {name: 'portHistory'})
     async portHistory (@Arg('portCallId', type => Int) portCallId: number) {
-
-        const history = []
 
         let port = await PortCall.findByPk(portCallId)
         if (!port) {
             return []
         }
-        history.push(port)
-        while (port.fkPortCallId) {
-            const pp = await PortCall.findByPk(port.fkPortCallId)
-            if (!pp) {
+
+        let arrayPortCalls = (await PortCall.findAll({
+            where: {
+                fkVesselId:port.fkVesselId,
+                lastStatus: { [Sequelize.Op.in]:[PORT_CALL_STATUS.PROCESSED,PORT_CALL_STATUS.VALID,PORT_CALL_STATUS.DELETED]}
+            },
+            order: [['arrivalDate', 'ASC']]
+        })).map(x => x.toJSON() as PortCall)
+
+        let index = arrayPortCalls.findIndex(x => x.id === port.id)
+        /** back to first occurrence */
+        while (index > 0) {
+            if (port.fkPortId !== arrayPortCalls[index - 1].fkPortId) {
                 break
             }
-            history.push(pp)
-            port = pp
+            index--
         }
-        return history.reverse()
 
+        arrayPortCalls =  arrayPortCalls.slice(index)
+        index = arrayPortCalls.findIndex(x => x.fkPortId !== port.fkPortId)
+        if (index !== -1) {
+            arrayPortCalls = arrayPortCalls.slice(0,index)
+        }
+
+        arrayPortCalls.sort((x,y) => x.createdAt.getTime() - y.createdAt.getTime())
+
+        port = arrayPortCalls.find(x => x.id === port.id)
+        const historyArray = []
+
+        while (arrayPortCalls.length > 0) {
+            const childrens = []
+            const port = arrayPortCalls.shift()
+            let _port = port
+            childrens.push(port)
+            while (_port.fkPortCallId) {
+                _port = await PortCall.findByPk(_port.fkPortCallId)
+                if (!_port) {
+                    break
+                }
+                childrens.push(_port)
+            }
+            historyArray.push(...childrens.reverse())
+        }
+        return historyArray.map(x => ({
+            id: x.id,
+            initStatus: x.initStatus,
+            lastStatus: x.lastStatus,
+            departureDate: x.departureDate,
+            arrivalDate: x.arrivalDate,
+            createdAt: x.createdAt,
+            updatedAt:x.updatedAt
+        }))
     }
 
     @Query(returns => [Port], {name: 'schedulePorts'})
@@ -197,11 +293,12 @@ export class PortResolver {
             }
         })
 
-        return Port.findAll(({
+        return  Port.findAll(({
             where: {
                 id: { [Sequelize.Op.in]:data.map((x: any) => x.fkPortId)},
             }
         }))
+
     }
 
 }

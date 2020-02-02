@@ -188,7 +188,9 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
         return void(0)
     }
 
-    result = result.filter(x => PortCallsCompareNode.isAcceptable(x))
+    if (result.length > 1) {
+        result = result.filter(x => PortCallsCompareNode.isAcceptable(x))
+    }
 
     result.sort((a,b) =>  a.changes - b.changes)
 
@@ -248,11 +250,6 @@ class PortCallsCompareNode {
         if (result.array.length === 0) {
             return true
         }
-        const p = result.array[0]
-        if (p.status !== PORT_CALL_STATUS.PROCESSED  &&  p.status !== PORT_CALL_STATUS.VALID  &&  p.status !== PORT_CALL_STATUS.ADDED ) {
-            return false
-        }
-
         let startRoute = result.arrayOld.filter(p =>  p.source === 'O')
         let endRoute = result.array.filter(p => p.source === 'N')
         if (startRoute.length === 0 || endRoute.length === 0) {
@@ -310,6 +307,7 @@ class PortCallsCompareNode {
         return true
     }
 
+
     checkChanges (result: INodeStatusResult) {
         /** first mark all at start that have removed that are processed */
         result.changes = 0
@@ -329,6 +327,8 @@ class PortCallsCompareNode {
             y.status = PORT_CALL_STATUS.ADDED
             return true
         })
+
+        /** swapped position fix */
 
         let index =  0
         /** all at start that are marked PROCESSED count as one changes */

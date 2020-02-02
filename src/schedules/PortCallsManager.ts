@@ -47,6 +47,10 @@ export class VesselPortCall {
         }
         const result = await axios.get(`https://import-coding-challenge-api.portchain.com/api/vessel-schedules/${this.vesselNumber}?cursor=${date.toISOString().substring(0, 10)}`)
         let portCalls = result.data
+        if (portCalls.length === 0) {
+            /** we are going to leave last state as valid */
+            return
+        }
         let ports = portCalls.map((x: any) => x.port)
         /** sort the ports  */
         ports.sort((a: any, b: any) => (a.id < b.id) ? -1 : ((a.id > b.id) ? 1 : 0))
@@ -192,8 +196,8 @@ class PortCallsManager {
     private lastDate: Date
 
     constructor () {
-        this.currentDate = new Date(2019, 0, 20, 12, 12)
-        this.lastDate = new Date(2019,1,1, 12,12)
+        this.currentDate = new Date(2019, 3, 15, 12, 12)
+        this.lastDate = new Date(2019,6,1, 12,12)
     }
 
     async setVessels () {
