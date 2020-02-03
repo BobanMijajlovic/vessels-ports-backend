@@ -6,7 +6,7 @@ import {initSequelize}    from './sequelize/sequelize'
 import createApolloServer from './apolloServer'
 import portCallManager    from './schedules/PortCallsManager'
 
-const cleanBase = process.env.CLEEN_BASE ? (process.env.CLEAN_BASE === 'N') : !!configuration.cleanBase
+const cleanBase = process.env.CLEEN_BASE ? (process.env.CLEAN_BASE === 'Y') : !!configuration.cleanBase
 
 const app = express()
 app.use(bodyParser.json())
@@ -34,7 +34,7 @@ app.use(cors(corsOptions));
         console.log(`Apollo Server on http://localhost:${PORT}/graphql`)
     })
 
-    if (configuration.getSchedules) {
+    if (process.env.GET_SCHEDULES ? (process.env.GET_SCHEDULES === 'Y') : !!configuration.cleanBaseconfiguration.getSchedules) {
         await portCallManager.setVessels()
         portCallManager.setTimerInterval(1000)
     }
