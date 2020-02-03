@@ -34,7 +34,7 @@ app.use(cors(corsOptions));
         console.log(`Apollo Server on http://localhost:${PORT}/graphql`)
     })
 
-    if (process.env.GET_SCHEDULES ? (process.env.GET_SCHEDULES === 'Y') : !!configuration.cleanBaseconfiguration.getSchedules) {
+    if (process.env.GET_SCHEDULES ? (process.env.GET_SCHEDULES === 'Y') : !!configuration.getSchedules) {
         await portCallManager.setVessels()
         portCallManager.setTimerInterval(1000)
     }
