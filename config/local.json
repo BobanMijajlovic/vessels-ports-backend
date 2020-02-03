@@ -23,7 +23,7 @@
       }
     }
   },
-  "cleanBase": true,
+  "cleanBase": false,
   "getSchedules": true,
   "corsOrigin": {
     "whitelist": [

@@ -223,7 +223,7 @@ class PortCallsManager {
 
     async run () {
         const vessels = (await Vessel.findAll())
-            .filter( x => x.id === 9387425)
+          // /  .filter( x => x.id === 9387425)
             // .filter( x => x.id === 9335173)
 
         const vesselsProcess = vessels.map((x: any) => {
