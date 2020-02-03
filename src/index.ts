@@ -6,7 +6,7 @@ import {initSequelize}    from './sequelize/sequelize'
 import createApolloServer from './apolloServer'
 import portCallManager    from './schedules/PortCallsManager'
 
-const cleanBase = configuration.cleanBase
+const cleanBase = process.env.CLEEN_BASE ? (process.env.CLEAN_BASE === 'N') : !!configuration.cleanBase
 
 const app = express()
 app.use(bodyParser.json())

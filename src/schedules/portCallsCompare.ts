@@ -74,6 +74,12 @@ export interface  IComparePortsResult {
     printPorts: ()=> void
 }
 
+export interface ICompareMatch {
+    indexPrev: number
+    indexCurrent: number
+    count: number
+}
+
 const __result = (prevArr, newArr, totalChange, arrivalDif) => {
     const res = {
         array: newArr,
@@ -97,6 +103,54 @@ const __result = (prevArr, newArr, totalChange, arrivalDif) => {
             console.log()
         }
     }
+}
+
+const findMatchingPart = (arrayCurrent,arrayPrev) => {
+
+    const arrayResult = []
+
+    const findMatching  = (portCurrent: PortCall,indexCurrent: number, indexPrev: number) => {
+        const pos = arrayPrev.findIndex((x,index) => {
+            if (index < indexPrev) {
+                return false
+            }
+            return x.portId  === portCurrent.portId
+        })
+
+        if (pos === -1) {
+            return
+        }
+
+        indexPrev = pos
+
+        let count: number = 0
+        while (indexPrev + count < arrayPrev.length && indexCurrent + count < arrayCurrent.length) {
+            if (arrayPrev[indexPrev + count].portId !== arrayCurrent[indexCurrent + count].portId) {
+                break
+            }
+            count++
+        }
+
+        if (count < 3) {
+            return
+        }
+
+        arrayResult.push({
+            indexPrev,
+            indexCurrent,
+            count
+        })
+
+        findMatching(portCurrent,indexCurrent,indexPrev + 1)
+
+    }
+
+    arrayCurrent.forEach((x,index) => {
+        findMatching(x,index,0)
+    })
+
+    return arrayResult.sort((x,y) => y.count - x.count)
+
 }
 
 export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): IComparePortsResult => {
@@ -133,6 +187,110 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
 
     const isAddedPort = (portId) =>  !!addedPorts.find(x => x === portId)
     let result: INodeStatusResult[] = []
+
+    const matchingArray = findMatchingPart(currentArray,previousArray).slice(0,10)
+
+    matchingArray.forEach((match: ICompareMatch, indm) => {
+        let resultTempFront = []
+        let resultTempBack = []
+
+        PortCallsCompareNode.compareSchedule({
+            isRemovedPort: isRemovedPort,
+            isAddedPort: isAddedPort,
+            arrayNew: currentArray.slice(0,match.indexCurrent).map(x => x.newInstance),
+            arrayOld: previousArray.slice(0,match.indexPrev).map(x => x.newInstance),
+            indexNew: 0,
+            indexOld: 0,
+            result: resultTempFront
+        })
+
+        PortCallsCompareNode.compareSchedule({
+            isRemovedPort: isRemovedPort,
+            isAddedPort: isAddedPort,
+            arrayNew: currentArray.slice(match.indexCurrent + match.count).map(x => x.newInstance),
+            arrayOld: previousArray.slice(match.indexPrev + match.count).map(x => x.newInstance),
+            indexNew: 0,
+            indexOld: 0,
+            result: resultTempBack
+        })
+
+        resultTempFront = resultTempFront.sort((a,b) =>  a.changes - b.changes).filter((x,i,array) => {
+            return x.changes === array[0].changes
+        })
+            .sort((a,b) => Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif))
+
+        resultTempBack = resultTempBack.sort((a,b) =>  a.changes - b.changes).filter((x,i,array) => {
+            return x.changes === array[0].changes
+        })
+            .sort((a,b) => Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif))
+
+        const resF: INodeResult = resultTempFront.length > 0 ? resultTempFront[0] : {
+            array:0,
+            arrayOld:0,
+            changes:0,
+            arrivalDif: 0
+        }
+
+        const resB: INodeResult = resultTempBack.length > 0 ? resultTempBack[0] : {
+            array:0,
+            arrayOld:0,
+            changes:0,
+            arrivalDif: 0
+        }
+
+        /** fix array in resF */
+
+        resF.array.reverse().every(x => {
+            if (x.status === PORT_CALL_STATUS.ADDED) {
+                x.status = PORT_CALL_STATUS.INSERTED
+                return true
+            }
+            return false
+        })
+        resF.array.reverse()
+
+        resF.arrayOld.reverse().every(x => {
+            if (x.status === PORT_CALL_STATUS.ADDED) {
+                x.status = PORT_CALL_STATUS.INSERTED
+                return true
+            }
+            return false
+        })
+        resF.arrayOld.reverse()
+
+        resB.array.every(x => {
+            if (x.status === PORT_CALL_STATUS.PROCESSED) {
+                x.status = PORT_CALL_STATUS.DELETED
+                return true
+            }
+            return false
+        })
+
+        resB.arrayOld.every(x => {
+            if (x.status === PORT_CALL_STATUS.PROCESSED) {
+                x.status = PORT_CALL_STATUS.DELETED
+                return true
+            }
+            return false
+        })
+
+        const res = {
+            array: [...resF.array, ...currentArray.slice(match.indexCurrent,match.indexCurrent + match.count).map(x => x.newInstance)
+                .map(x => {
+                    x.status = PORT_CALL_STATUS.VALID; return x
+                }), ...resB.array],
+            arrayOld: [...resF.arrayOld, ...previousArray.slice(match.indexPrev, match.indexPrev + match.count).map(x => x.newInstance)
+                .map(x => {
+                    x.status = PORT_CALL_STATUS.VALID; return x
+                }),
+            ...resB.arrayOld],
+            changes: resF.changes + resB.changes,
+            arrivalDif: resF.arrivalDif + resB.arrivalDif
+        }
+
+        result.push(res)
+
+    })
 
     PortCallsCompareNode.compareSchedule({
         isRemovedPort: isRemovedPort,
@@ -184,31 +342,18 @@ export const compareSchedulePortCalls  =  (realArrayNew, realArrayPrev): ICompar
 
     findResults(0)
 
-    if (result.length === 0) {
-        return void(0)
+    result = result.sort((a,b) =>  a.changes - b.changes).filter((x,i,array) => {
+        return x.changes === array[0].changes
+    })
+        .sort((a,b) => Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif))
+
+    const res = result.length > 0 ? result[0] : {
+        array:0,
+        arrayOld:0,
+        changes:0,
+        arrivalDif: 0
     }
-
-    if (result.length > 1) {
-        result = result.filter(x => PortCallsCompareNode.isAcceptable(x))
-    }
-
-    result.sort((a,b) =>  a.changes - b.changes)
-
-    if (result.length === 0) {
-        return void(0)
-    }
-
-    let res = result[0]
-    /** just take with minimum time difference */
-    result = result.filter(x =>  x.changes === res.changes)
-
-    if ( result.length > 0) {
-        result.sort((a,b) =>  Math.abs(a.arrivalDif) - Math.abs(b.arrivalDif))
-        res = result[0]
-    }
-
     return __result(res.arrayOld,res.array,res.changes,res.arrivalDif)
-
 }
 
 const MAX_DEEP = 500
@@ -306,7 +451,6 @@ class PortCallsCompareNode {
         }
         return true
     }
-
 
     checkChanges (result: INodeStatusResult) {
         /** first mark all at start that have removed that are processed */

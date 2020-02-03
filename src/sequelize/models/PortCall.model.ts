@@ -1,12 +1,14 @@
 import 'reflect-metadata'
 import {
     Arg,
+    Args,
     Field,
     ID,
     Int,
     ObjectType,
     Query,
     Resolver,
+    Root,
     Subscription
 } from 'type-graphql'
 import {
@@ -175,8 +177,27 @@ class PortCallHistory {
     departureDate: Date
 }
 
+@ObjectType()
+export class Notification {
+    @Field(type => ID)
+    id: number
+
+    @Field(type => Int)
+    sequence: number
+}
+
+export interface INotificationPayload {
+    id: number;
+    sequence: number;
+}
+
 @Resolver()
 export class PortResolver {
+
+    @Subscription({ topics: 'NEW_VALID_SEQUENCE' })
+    subscriptionSequence (@Root() { id, sequence }: INotificationPayload): Notification {
+        return { id, sequence }
+    }
 
     @Query(returns => [PortCall], {name: 'validSchedule'})
     async validSchedule (@Arg('vessel', type => Int) vessel: number) {
