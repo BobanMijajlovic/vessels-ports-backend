@@ -24,7 +24,7 @@
     }
   },
   "cleanBase": false,
-  "getSchedules": true,
+  "getSchedules": false,
   "corsOrigin": {
     "whitelist": [
       "https://challenge-wexxs2.herokuapp.com",
