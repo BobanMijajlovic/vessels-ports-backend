@@ -122,7 +122,7 @@ export class VesselPortCall {
         })
 
         const compareResult = compareSchedulePortCalls(portCalls, previousValidPorts)
-        compareResult.printPorts()
+      //  compareResult.printPorts()
 
         /** Result have to bi fixed */
         const transaction = await sequelize.transaction()
@@ -232,7 +232,7 @@ class PortCallsManager {
         })
         await Promise.all(vesselsProcess)
         this.currentDate.setDate(this.currentDate.getDate() + 1)
-        console.log(this.currentDate)
+       // console.log(this.currentDate)
         if (this.lastDate < this.currentDate) {
             return
         }
