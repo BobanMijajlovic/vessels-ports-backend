@@ -397,80 +397,25 @@ class PortCallsCompareNode {
         p.fixNode()
     }
 
+    /** function returns next portCall in array that has not defined status
+     *
+     * @param array: route that can be last valid from db or new one ( mixed with already portcalls that find matchs)
+     * @param indexStr
+     */
     getCurrentProcessingPortCall (array,indexStr) {
         const len = array.length
-        let index = this.data[indexStr]
+        let index = this.data[indexStr] /** index is stored in data object and with it by string name */
         while (index < len) {
             const pp = array[index]
             if (pp.status !== PORT_CALL_STATUS.NOT_DEFINED) {
                 index++
                 continue
             }
+            /** when find first that has not defined status, memo index and return object ( portCallTemp ) */
             this.data[indexStr] = index
             return pp
         }
         return void(0)
-    }
-
-    static isAcceptable (result: INodeResult) {
-        if (result.array.length === 0) {
-            return true
-        }
-        let startRoute = result.arrayOld.filter(p =>  p.source === 'O')
-        let endRoute = result.array.filter(p => p.source === 'N')
-        if (startRoute.length === 0 || endRoute.length === 0) {
-            return
-        }
-        const isErrorInSystem = startRoute.find(x => {
-            return (x.status === PORT_CALL_STATUS.INSERTED ||  x.status === PORT_CALL_STATUS.NEW || x.status === PORT_CALL_STATUS.ADDED)
-        })
-        const isErrorInSystem2 = endRoute.find((x => {
-            return (x.status === PORT_CALL_STATUS.DELETED  || x.status === PORT_CALL_STATUS.PROCESSED ||  x.status === PORT_CALL_STATUS.REMOVED)
-        }))
-
-        if (isErrorInSystem || isErrorInSystem2) {
-            return false /** this has to be additionally processed */
-        }
-
-        /** all start route processed removed from start */
-        let index = startRoute.findIndex(x => x.status !== PORT_CALL_STATUS.PROCESSED)
-        if (index > 0) {
-            startRoute = startRoute.slice(index)
-        }
-
-        endRoute = endRoute.reverse()
-        index = endRoute.findIndex(x => x.status !== PORT_CALL_STATUS.ADDED)
-        if (index > 0) {
-            endRoute = endRoute.slice(index)
-        }
-        endRoute = endRoute.reverse()
-
-        while (endRoute.length > 0 && startRoute.length > 0) {
-            const o = endRoute.pop()
-            const n = startRoute.pop()
-
-            if (!o) {
-                if (n.status === PORT_CALL_STATUS.ADDED) {
-                    continue
-                } else {
-                    return false
-                }
-            }
-            if (!n) {
-                if (o.status === PORT_CALL_STATUS.REMOVED) {
-                    continue
-                } else {
-                    return false
-                }
-            }
-
-            if (n.portId === o.portId) {
-                if (n.status !== o.status) {
-                    return false
-                }
-            }
-        }
-        return true
     }
 
     checkChanges (result: INodeStatusResult) {
@@ -568,8 +513,11 @@ class PortCallsCompareNode {
     }
 
     fixNode () {
+        /** newRoute is last valid route from endpoint,  oldRoute is last valid route from our db */
+        /** find next portCalls (portCallTemp) that has not defined status in this  process of comparing */
         const portCallOld: PortCallTemp = this.getCurrentProcessingPortCall(this.data.arrayOld, 'indexOld')
         const portCallNew: PortCallTemp = this.getCurrentProcessingPortCall(this.data.arrayNew, 'indexNew')
+        /** if there is no more then process is finished and result can be stored in array */
         if (!portCallOld && !portCallNew) {
             const res = {
                 array :  this.data.arrayNew,
@@ -581,7 +529,7 @@ class PortCallsCompareNode {
             this.data.result.push(res)
             return
         }
-
+        /** if there is no more new portCall - instance from new route then all position last valid route will be marked as removed */
         if (!portCallNew) {
             /** this means point is deleted */
             portCallOld.status = PORT_CALL_STATUS.REMOVED
@@ -589,7 +537,7 @@ class PortCallsCompareNode {
             this.fixNode()
             return
         }
-
+         /** if there is no more portCalls in old route then all position in newRoute can be marked as new , later we will fixed as added if it is real end of route */
         if (!portCallOld) {
             /** this means port is added */
             portCallNew.status = PORT_CALL_STATUS.NEW
@@ -598,7 +546,7 @@ class PortCallsCompareNode {
             return
         }
 
-        /** if port call same then we have matching */
+        /** if port call same then we have matching , right now do not care about time difference*/
         if (portCallNew.portId === portCallOld.portId) {
             portCallOld.status = PORT_CALL_STATUS.VALID
             portCallNew.status = PORT_CALL_STATUS.VALID
@@ -607,11 +555,11 @@ class PortCallsCompareNode {
         }
 
         /** in this point we have two portCalls with different portId
-         *  we can assume two possibilities one that point is removed from current
-         *  point that is in prevArray or new point is added in current array
+         *  we can assume two possibilities one that point is removed from oldRoute
+         *  or that newPort is added to new Route
          */
 
-        /** if we  sure that is removed then only one step */
+        /** if we  sure that is removed then only one step , here we calling injected functions*/
         if (this.data.isRemovedPort(portCallOld.portId)) {
             portCallOld.status = PORT_CALL_STATUS.REMOVED
             this.data.arrayNew.splice(this.data.indexNew,0,portCallOld)
@@ -628,7 +576,7 @@ class PortCallsCompareNode {
         }
 
         /** we must start new search in two direction */
-        /** give priority to some search*/
+        /** give priority to some search, if indexNew is 0 then we can assume that old port is removed ( bigger possibilities, and later we will mark as processed if it is on the start of array),   */
 
         if (this.data.indexNew === 0  || (this.data.arrayNew[this.data.indexNew - 1].status === PORT_CALL_STATUS.REMOVED) ) {
             /** if first then probably is done  - processed */
