@@ -588,7 +588,6 @@ class PortCallsCompareNode {
             this.fixNodePoint(false)
             return
         }
-
         /** try to match new in previous array */
 
         if (this.data.arrayOld.findIndex(x => {
