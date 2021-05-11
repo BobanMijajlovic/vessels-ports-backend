@@ -35,7 +35,7 @@
     "ts-node": "^8.6.2",
     "ts-node-dev": "^1.0.0-pre.43",
     "typescript": "^3.7.5",
-    "lodash": "^4.17.15"
+    "lodash": "^4.17.21"
   },
   "dependencies": {
     "@types/lodash": "^4.14.149",
@@ -52,7 +52,7 @@
     "graphql-redis-subscriptions": "^2.1.2",
     "graphql-type-json": "^0.3.1",
     "graphql-yoga": "^1.18.3",
-    "lodash": "^4.17.15",
+    "lodash": "^4.17.21",
     "nodemon": "^2.0.2",
     "pg": "^7.17.1",
     "pg-hstore": "^2.3.3",
